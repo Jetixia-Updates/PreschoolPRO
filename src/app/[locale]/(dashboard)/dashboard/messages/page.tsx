@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useParentChildren } from "@/hooks/use-parent-children";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -222,6 +223,7 @@ export default function MessagesPage() {
   const params = useParams();
   const locale = params.locale as string;
   const isRTL = locale === "ar";
+  const { isParentView, myChildrenNames } = useParentChildren();
   const { toasts, success, dismiss } = useToast();
 
   // ── Core state ──────────────────────────────────────────────────
@@ -231,6 +233,20 @@ export default function MessagesPage() {
   const [search, setSearch] = useState("");
   const [replyText, setReplyText] = useState("");
   const [activeTab, setActiveTab] = useState("inbox");
+
+  // ── Parent view: only conversations from school (teachers/admin) or about my children ──
+  const conversationsForView = useMemo(() => {
+    if (!isParentView) return conversations;
+    return conversations.filter(
+      (c) =>
+        c.role === "teacher" ||
+        c.role === "admin" ||
+        (c.role === "parent" &&
+          myChildrenNames.some((child) =>
+            c.lastMessage.toLowerCase().includes(child.toLowerCase())
+          ))
+    );
+  }, [isParentView, conversations, myChildrenNames]);
 
   // ── Dialog state ────────────────────────────────────────────────
   const [composeOpen, setComposeOpen] = useState(false);
@@ -297,22 +313,28 @@ export default function MessagesPage() {
     back: isRTL ? "رجوع" : "Back",
   };
 
-  // ── Contacts list for compose dialog ───────────────────────────
-  const contacts = useMemo(() => conversations.map((c) => ({ id: c.id, name: c.name, role: c.role })), [conversations]);
+  // ── Contacts list for compose dialog (parent: only school contacts) ────────
+  const contacts = useMemo(
+    () => conversationsForView.map((c) => ({ id: c.id, name: c.name, role: c.role })),
+    [conversationsForView]
+  );
 
-  // ── Filtered conversations ─────────────────────────────────────
+  // ── Filtered conversations (search on view list) ──────────────────────────
   const filteredConversations = useMemo(
     () =>
-      conversations.filter(
+      conversationsForView.filter(
         (c) =>
           c.name.toLowerCase().includes(search.toLowerCase()) ||
           c.lastMessage.toLowerCase().includes(search.toLowerCase())
       ),
-    [conversations, search]
+    [conversationsForView, search]
   );
 
-  // ── Unread count ───────────────────────────────────────────────
-  const totalUnread = useMemo(() => conversations.reduce((sum, c) => sum + c.unread, 0), [conversations]);
+  // ── Unread count (parent: only from their view) ───────────────────────────
+  const totalUnread = useMemo(
+    () => conversationsForView.reduce((sum, c) => sum + c.unread, 0),
+    [conversationsForView]
+  );
 
   // ── Helpers ────────────────────────────────────────────────────
   const now = () => {
@@ -499,10 +521,12 @@ export default function MessagesPage() {
             <p className="mt-1 text-muted-foreground">{t.subtitle}</p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="gap-2" onClick={() => setAnnounceOpen(true)}>
-              <Bell className="h-4 w-4" />
-              {t.newAnnouncement}
-            </Button>
+            {!isParentView && (
+              <Button variant="outline" className="gap-2" onClick={() => setAnnounceOpen(true)}>
+                <Bell className="h-4 w-4" />
+                {t.newAnnouncement}
+              </Button>
+            )}
             <Button size="lg" className="gap-2" onClick={() => setComposeOpen(true)}>
               <Plus className="h-4 w-4" />
               {t.compose}

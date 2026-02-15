@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,9 +53,22 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Simulate login - replace with actual NextAuth signIn
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      router.push(`/${locale}/dashboard`);
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError(t.invalidCredentials);
+        return;
+      }
+      if (result?.ok) {
+        router.push(`/${locale}/dashboard`);
+        router.refresh();
+        return;
+      }
+      setError(t.invalidCredentials);
     } catch (err) {
       setError(t.invalidCredentials);
     } finally {

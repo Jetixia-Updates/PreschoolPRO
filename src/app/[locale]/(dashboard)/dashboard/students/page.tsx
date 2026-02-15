@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useParentChildren } from "@/hooks/use-parent-children";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Search,
@@ -96,6 +97,7 @@ export default function StudentsPage() {
   const router = useRouter();
   const params = useParams();
   const locale = params.locale as string;
+  const { isParentView, isMyChild } = useParentChildren();
 
   const { toasts, success, dismiss } = useToast();
 
@@ -114,16 +116,25 @@ export default function StudentsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
 
-  // ---- Derived data ----
+  // ---- Parent view: only their children (shown as "My Children") ----
+  const studentsForView = useMemo(
+    () =>
+      isParentView
+        ? students.filter((s) => isMyChild(`${s.firstName} ${s.lastName}`))
+        : students,
+    [students, isParentView, isMyChild]
+  );
+
+  // ---- Derived data (search/filter on view list) ----
   const filteredStudents = useMemo(() => {
-    return students.filter((s) => {
+    return studentsForView.filter((s) => {
       const fullName = `${s.firstName} ${s.lastName}`.toLowerCase();
       const matchesSearch = fullName.includes(search.toLowerCase());
       const matchesISCED =
         iscedFilter === "all" || s.iscedLevel === iscedFilter;
       return matchesSearch && matchesISCED;
     });
-  }, [students, search, iscedFilter]);
+  }, [studentsForView, search, iscedFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredStudents.length / ITEMS_PER_PAGE));
   const safePage = Math.min(currentPage, totalPages);
@@ -333,22 +344,26 @@ export default function StudentsPage() {
             <Users className="h-6 w-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Student Management</h1>
+            <h1 className="text-2xl font-bold text-gray-900">{isParentView ? "My Children" : "Student Management"}</h1>
             <p className="text-sm text-gray-500">
-              Manage all student profiles and enrollment
+              {isParentView
+                ? "View your child's profile and details"
+                : "Manage all student profiles and enrollment"}
             </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setForm(emptyForm());
-            setAddOpen(true);
-          }}
-          className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:from-blue-700 hover:to-indigo-700 transition-all"
-        >
-          <Plus className="h-4 w-4" />
-          Add Student
-        </button>
+        {!isParentView && (
+          <button
+            onClick={() => {
+              setForm(emptyForm());
+              setAddOpen(true);
+            }}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-200 hover:shadow-xl hover:from-blue-700 hover:to-indigo-700 transition-all"
+          >
+            <Plus className="h-4 w-4" />
+            Add Student
+          </button>
+        )}
       </motion.div>
 
       {/* ===== Summary Cards ===== */}
@@ -364,8 +379,8 @@ export default function StudentsPage() {
               <Users className="h-5 w-5 text-blue-600" />
             </div>
             <div>
-              <p className="text-2xl font-bold text-gray-900">{students.length}</p>
-              <p className="text-xs text-gray-500">Total Students</p>
+              <p className="text-2xl font-bold text-gray-900">{studentsForView.length}</p>
+              <p className="text-xs text-gray-500">{isParentView ? "My Children" : "Total Students"}</p>
             </div>
           </div>
         </div>
@@ -376,7 +391,7 @@ export default function StudentsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {students.filter((s) => s.iscedLevel === "ISCED 010").length}
+                {studentsForView.filter((s) => s.iscedLevel === "ISCED 010").length}
               </p>
               <p className="text-xs text-gray-500">ISCED 010</p>
             </div>
@@ -389,7 +404,7 @@ export default function StudentsPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {students.filter((s) => s.iscedLevel === "ISCED 020").length}
+                {studentsForView.filter((s) => s.iscedLevel === "ISCED 020").length}
               </p>
               <p className="text-xs text-gray-500">ISCED 020</p>
             </div>
@@ -552,20 +567,24 @@ export default function StudentsPage() {
                         >
                           <Eye className="h-4 w-4" />
                         </button>
-                        <button
-                          onClick={() => openEdit(student)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => openDelete(student)}
-                          className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {!isParentView && (
+                          <>
+                            <button
+                              onClick={() => openEdit(student)}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => openDelete(student)}
+                              className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -573,7 +592,7 @@ export default function StudentsPage() {
                 {paginatedStudents.length === 0 && (
                   <tr>
                     <td colSpan={7} className="py-12 text-center text-gray-400">
-                      No students found matching your filters.
+                      {isParentView ? "No children linked to your account." : "No students found matching your filters."}
                     </td>
                   </tr>
                 )}
@@ -645,27 +664,31 @@ export default function StudentsPage() {
                   >
                     <Eye className="h-4 w-4" />
                   </button>
-                  <button
-                    onClick={() => openEdit(student)}
-                    className="rounded-lg p-2 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
-                    title="Edit"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => openDelete(student)}
-                    className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {!isParentView && (
+                    <>
+                      <button
+                        onClick={() => openEdit(student)}
+                        className="rounded-lg p-2 text-gray-400 hover:bg-amber-50 hover:text-amber-600 transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => openDelete(student)}
+                        className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                        title="Delete"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
               </motion.div>
             ))}
           </AnimatePresence>
           {paginatedStudents.length === 0 && (
             <div className="col-span-full py-12 text-center text-gray-400">
-              No students found matching your filters.
+              {isParentView ? "No children linked to your account." : "No students found matching your filters."}
             </div>
           )}
         </motion.div>

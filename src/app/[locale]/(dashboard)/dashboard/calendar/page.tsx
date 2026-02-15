@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import { useParams } from "next/navigation";
+import { useParentChildren } from "@/hooks/use-parent-children";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -343,6 +344,16 @@ export default function CalendarPage() {
   // ── Events state ────────────────────────────────────────────────────────
   const [events, setEvents] = useState<CalendarEvent[]>(createInitialEvents);
 
+  // ── Parent view: only events relevant to parents (exclude staff-only) ─────
+  const { isParentView } = useParentChildren();
+  const eventsForView = useMemo(() => {
+    if (!isParentView) return events;
+    return events.filter(
+      (e) =>
+        !/staff\s+development|monthly\s+staff\s+meeting/i.test(e.title)
+    );
+  }, [isParentView, events]);
+
   // ── Dialog state ────────────────────────────────────────────────────────
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -373,18 +384,18 @@ export default function CalendarPage() {
   const getEventsForDay = useCallback(
     (day: number) => {
       const dateStr = toDateStr(viewYear, viewMonth, day);
-      return events.filter((e) => {
+      return eventsForView.filter((e) => {
         if (activeFilter !== "all" && e.category !== activeFilter) return false;
         return e.date === dateStr;
       });
     },
-    [events, viewMonth, viewYear, activeFilter]
+    [eventsForView, viewMonth, viewYear, activeFilter]
   );
 
   const filteredEvents = useMemo(() => {
-    if (activeFilter === "all") return events;
-    return events.filter((e) => e.category === activeFilter);
-  }, [events, activeFilter]);
+    if (activeFilter === "all") return eventsForView;
+    return eventsForView.filter((e) => e.category === activeFilter);
+  }, [eventsForView, activeFilter]);
 
   const upcomingEvents = useMemo(() => {
     const todayStr = toDateStr(
@@ -896,7 +907,7 @@ export default function CalendarPage() {
                     (typeof CATEGORY_CONFIG)[EventCategory],
                   ][]
                 ).map(([key, cfg]) => {
-                  const count = events.filter(
+                  const count = eventsForView.filter(
                     (e) => e.category === key
                   ).length;
                   const isActive = activeFilter === key;

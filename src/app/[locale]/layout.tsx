@@ -3,6 +3,7 @@ import { setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { TRPCReactProvider } from "@/lib/trpc/client";
+import { SessionProvider } from "@/components/providers/session-provider";
 import "../globals.css";
 
 type Props = {
@@ -24,9 +25,11 @@ export default async function LocaleLayout({ children, params }: Props) {
   return (
     <html lang={locale} dir={direction}>
       <body>
-        <NextIntlClientProvider>
-          <TRPCReactProvider>{children}</TRPCReactProvider>
-        </NextIntlClientProvider>
+        <SessionProvider>
+          <NextIntlClientProvider>
+            <TRPCReactProvider>{children}</TRPCReactProvider>
+          </NextIntlClientProvider>
+        </SessionProvider>
       </body>
     </html>
   );

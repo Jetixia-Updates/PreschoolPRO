@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -52,9 +53,25 @@ export default function DashboardPage() {
   const params = useParams();
   const locale = params.locale as string;
   const isRTL = locale === "ar";
+  const { data: session } = useSession();
   const { toasts, success, info, warning, dismiss } = useToast();
 
   const [dateRange, setDateRange] = useState<DateRange>("month");
+
+  // Parent sees only Parents + Messages; redirect to Parents page
+  useEffect(() => {
+    if (session?.user?.role === "PARENT") {
+      router.replace(`/${locale}/dashboard/parents`);
+    }
+  }, [session?.user?.role, locale, router]);
+
+  if (session?.user?.role === "PARENT") {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <p className="text-muted-foreground">{isRTL ? "جاري التوجيه..." : "Redirecting..."}</p>
+      </div>
+    );
+  }
 
   // ── Helper ──────────────────────────────────────────────────────
   const nav = (path: string) => router.push(`/${locale}${path}`);

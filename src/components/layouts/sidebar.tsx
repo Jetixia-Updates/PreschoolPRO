@@ -44,12 +44,14 @@ const sidebarItems: SidebarItem[] = [
     labelAr: "لوحة التحكم",
     href: "/dashboard",
     icon: LayoutDashboard,
+    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "ASSISTANT_TEACHER", "ACCOUNTANT", "HEALTH_SUPERVISOR"],
   },
   {
     label: "Students",
     labelAr: "الطلاب",
     href: "/dashboard/students",
     icon: Baby,
+    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "ASSISTANT_TEACHER", "ACCOUNTANT", "HEALTH_SUPERVISOR"],
   },
   {
     label: "Development",
@@ -77,7 +79,7 @@ const sidebarItems: SidebarItem[] = [
     labelAr: "أولياء الأمور",
     href: "/dashboard/parents",
     icon: Users,
-    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"],
+    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT"],
   },
   {
     label: "Curriculum",
@@ -105,12 +107,14 @@ const sidebarItems: SidebarItem[] = [
     labelAr: "الرسائل",
     href: "/dashboard/messages",
     icon: MessageCircle,
+    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "ASSISTANT_TEACHER", "PARENT"],
   },
   {
     label: "Calendar",
     labelAr: "التقويم",
     href: "/dashboard/calendar",
     icon: Calendar,
+    roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "ASSISTANT_TEACHER", "ACCOUNTANT", "HEALTH_SUPERVISOR"],
   },
   {
     label: "Reports",
@@ -138,15 +142,31 @@ interface SidebarProps {
   };
 }
 
+const VALID_ROLES = new Set([
+  "SUPER_ADMIN",
+  "SCHOOL_ADMIN",
+  "TEACHER",
+  "ASSISTANT_TEACHER",
+  "PARENT",
+  "ACCOUNTANT",
+  "HEALTH_SUPERVISOR",
+]);
+
 export function Sidebar({ locale, user }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
   const isRTL = locale === "ar";
 
+  // Normalize role to string; treat unknown as PARENT (most restrictive)
+  const role =
+    typeof user.role === "string" && VALID_ROLES.has(user.role)
+      ? user.role
+      : "PARENT";
+
   const filteredItems = sidebarItems.filter((item) => {
     if (!item.roles) return true;
-    return item.roles.includes(user.role);
+    return item.roles.includes(role);
   });
 
   const roleLabels: Record<string, string> = {

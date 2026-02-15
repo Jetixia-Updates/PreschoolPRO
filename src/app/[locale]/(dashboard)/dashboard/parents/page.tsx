@@ -1,7 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
+import { useParentChildren } from "@/hooks/use-parent-children";
 import { motion } from "framer-motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -90,6 +92,8 @@ export default function ParentsPage() {
   const router = useRouter();
   const locale = params.locale as string;
   const isRTL = locale === "ar";
+  const { data: session } = useSession();
+  const { isParentView, myChildrenNames, isMyChild } = useParentChildren();
   const { toasts, success, error, info, warning, dismiss } = useToast();
 
   /* ─── translations ─── */
@@ -138,6 +142,15 @@ export default function ParentsPage() {
     markPaid: isRTL ? "تعيين كمدفوع" : "Mark as Paid",
     recentTransactions: isRTL ? "المعاملات الأخيرة" : "Recent Transactions",
     paymentStatus: isRTL ? "حالة المدفوعات" : "Payment Status",
+    myChildPortal: isRTL ? "بوابة طفلي" : "My Child's Portal",
+    myChildSubtitle: isRTL
+      ? "التقارير اليومية والصحة والمدفوعات لطفلك"
+      : "Daily reports, health, and payments for your child",
+    myChildTab: isRTL ? "طفلي" : "My Child",
+    myChildrenTab: isRTL ? "أطفالي" : "My Children",
+    healthTab: isRTL ? "الصحة" : "Health",
+    viewFullHealthReport: isRTL ? "عرض التقرير الصحي الكامل" : "View full Health report",
+    uploadDailyHomework: isRTL ? "رفع الواجب اليومي" : "Upload daily homework",
   };
 
   /* ─── state: mock data ─── */
@@ -267,7 +280,7 @@ export default function ParentsPage() {
     },
     {
       id: 3,
-      child: isRTL ? "سارة محمد" : "Sara Mohammed",
+      child: isRTL ? "سارة أحمد" : "Sara Ahmed",
       date: "2026-02-15",
       time: "12:45 PM",
       mood: "happy",
@@ -389,10 +402,58 @@ export default function ParentsPage() {
   const [expandedReportId, setExpandedReportId] = useState<number | null>(null);
   const [viewReportDialogOpen, setViewReportDialogOpen] = useState(false);
   const [viewingReport, setViewingReport] = useState<DailyReport | null>(null);
+  const [homeworkDialogOpen, setHomeworkDialogOpen] = useState(false);
+  const [homeworkChild, setHomeworkChild] = useState("");
+  const [homeworkNotes, setHomeworkNotes] = useState("");
 
-  /* ─── all students for dropdown ─── */
-  const allStudents = families.flatMap((f) =>
-    f.children.map((c) => `${c.name} (${c.classroom})`)
+  /* ─── Parent view: only my family, my children's reports, my payments ─────── */
+  const familiesForView = useMemo(() => {
+    if (!isParentView || !session?.user) return families;
+    const parentName = session.user.name ?? "Parent";
+    const parentEmail = session.user.email ?? "";
+    return [
+      {
+        id: 0,
+        parentName: isRTL ? `عائلتي` : "My Family",
+        email: parentEmail,
+        children: myChildrenNames.map((name) => ({
+          name,
+          classroom: isRTL ? "—" : "—",
+          age: "",
+        })),
+        phone: "",
+        paymentStatus: "paid" as const,
+        lastContact: isRTL ? "—" : "—",
+        monthlyAmount: 0,
+      },
+    ];
+  }, [isParentView, session?.user?.name, session?.user?.email, families, myChildrenNames, isRTL]);
+
+  const dailyReportsForView = useMemo(
+    () =>
+      isParentView
+        ? dailyReports.filter((r) => isMyChild(r.child))
+        : dailyReports,
+    [isParentView, dailyReports, isMyChild]
+  );
+
+  const paymentHistoryForView = useMemo(() => {
+    if (!isParentView || !session?.user?.name) return paymentHistory;
+    const firstName = session.user.name.split(" ")[0]?.toLowerCase() ?? "";
+    return paymentHistory.filter((p) =>
+      p.familyName.toLowerCase().includes(firstName)
+    );
+  }, [isParentView, session?.user?.name, paymentHistory]);
+
+  /* ─── all students for dropdown (staff: all; parent: only my children) ───── */
+  const allStudents = useMemo(
+    () =>
+      isParentView
+        ? myChildrenNames.map((n) => `${n} (—)`)
+        : families.flatMap((f) =>
+            f.children.map((c) => `${c.name} (${c.classroom})`)
+          ),
+    [isParentView, families, myChildrenNames]
   );
 
   /* ─── helpers ─── */
@@ -586,7 +647,7 @@ export default function ParentsPage() {
         f.id === familyId ? { ...f, paymentStatus: "paid" as const } : f
       )
     );
-    const family = families.find((f) => f.id === familyId);
+    const family = familiesForView.find((f) => f.id === familyId);
     success(
       isRTL ? "تم تحديث الدفع" : "Payment Updated",
       isRTL
@@ -604,6 +665,22 @@ export default function ParentsPage() {
     );
   };
 
+  const handleSubmitHomework = () => {
+    if (!homeworkChild.trim()) {
+      error(isRTL ? "الرجاء اختيار الطفل" : "Please select your child");
+      return;
+    }
+    success(
+      isRTL ? "تم رفع الواجب" : "Homework Submitted",
+      isRTL
+        ? `تم رفع الواجب اليومي لـ ${homeworkChild}`
+        : `Daily homework submitted for ${homeworkChild}`
+    );
+    setHomeworkDialogOpen(false);
+    setHomeworkChild("");
+    setHomeworkNotes("");
+  };
+
   /* ─── shared input class ─── */
   const inputClass =
     "w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors";
@@ -618,8 +695,12 @@ export default function ParentsPage() {
       <motion.div {...fadeInUp} transition={{ duration: 0.4 }}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold">{t.title}</h1>
-            <p className="mt-1 text-muted-foreground">{t.subtitle}</p>
+            <h1 className="text-3xl font-bold">
+              {isParentView ? t.myChildPortal : t.title}
+            </h1>
+            <p className="mt-1 text-muted-foreground">
+              {isParentView ? t.myChildSubtitle : t.subtitle}
+            </p>
           </div>
           <div className="flex gap-2">
             <Button
@@ -631,60 +712,122 @@ export default function ParentsPage() {
               <MessageSquare className="h-4 w-4" />
               {t.sendMessage}
             </Button>
-            <Button
-              size="lg"
-              className="gap-2"
-              onClick={() => setAnnouncementDialogOpen(true)}
-            >
-              <Send className="h-4 w-4" />
-              {t.sendAnnouncement}
-            </Button>
+            {isParentView ? (
+              <Button
+                size="lg"
+                className="gap-2"
+                onClick={() => {
+                  setHomeworkChild(myChildrenNames[0] ?? "");
+                  setHomeworkNotes("");
+                  setHomeworkDialogOpen(true);
+                }}
+              >
+                <FileText className="h-4 w-4" />
+                {t.uploadDailyHomework}
+              </Button>
+            ) : (
+              <Button
+                size="lg"
+                className="gap-2"
+                onClick={() => setAnnouncementDialogOpen(true)}
+              >
+                <Send className="h-4 w-4" />
+                {t.sendAnnouncement}
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>
 
       {/* ─── Stats ─── */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
-          <StatCard
-            title={t.totalFamilies}
-            value="189"
-            change="+5 this month"
-            changeType="positive"
-            icon={Users}
-            iconColor="bg-primary/10 text-primary"
-          />
-        </motion.div>
-        <motion.div {...fadeInUp} transition={{ delay: 0.15 }}>
-          <StatCard
-            title={t.activeParents}
-            value="342"
-            change="92% engagement"
-            changeType="positive"
-            icon={Heart}
-            iconColor="bg-secondary/10 text-secondary"
-          />
-        </motion.div>
-        <motion.div {...fadeInUp} transition={{ delay: 0.2 }}>
-          <StatCard
-            title={t.messagesThisWeek}
-            value="87"
-            change="+12 vs last week"
-            changeType="positive"
-            icon={MessageSquare}
-            iconColor="bg-accent/10 text-accent"
-          />
-        </motion.div>
-        <motion.div {...fadeInUp} transition={{ delay: 0.25 }}>
-          <StatCard
-            title={t.paymentsDue}
-            value="12"
-            change="3 overdue"
-            changeType="negative"
-            icon={CreditCard}
-            iconColor="bg-warning/10 text-warning"
-          />
-        </motion.div>
+        {isParentView ? (
+          <>
+            <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
+              <StatCard
+                title={myChildrenNames.length > 1 ? t.myChildrenTab : t.myChildTab}
+                value={String(myChildrenNames.length)}
+                change={t.childrenOverview}
+                changeType="positive"
+                icon={Baby}
+                iconColor="bg-primary/10 text-primary"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.15 }}>
+              <StatCard
+                title={t.dailyReports}
+                value={String(dailyReportsForView.length)}
+                change={t.today}
+                changeType="positive"
+                icon={FileText}
+                iconColor="bg-secondary/10 text-secondary"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.2 }}>
+              <StatCard
+                title={t.healthTab}
+                value="—"
+                change={t.viewFullHealthReport}
+                changeType="positive"
+                icon={Heart}
+                iconColor="bg-accent/10 text-accent"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.25 }}>
+              <StatCard
+                title={t.paymentStatus}
+                value={familiesForView[0]?.paymentStatus === "paid" ? t.paid : familiesForView[0]?.paymentStatus === "overdue" ? t.overdue : t.pending}
+                change={t.recentTransactions}
+                changeType={familiesForView[0]?.paymentStatus === "paid" ? "positive" : "negative"}
+                icon={CreditCard}
+                iconColor="bg-warning/10 text-warning"
+              />
+            </motion.div>
+          </>
+        ) : (
+          <>
+            <motion.div {...fadeInUp} transition={{ delay: 0.1 }}>
+              <StatCard
+                title={t.totalFamilies}
+                value="189"
+                change="+5 this month"
+                changeType="positive"
+                icon={Users}
+                iconColor="bg-primary/10 text-primary"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.15 }}>
+              <StatCard
+                title={t.activeParents}
+                value="342"
+                change="92% engagement"
+                changeType="positive"
+                icon={Heart}
+                iconColor="bg-secondary/10 text-secondary"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.2 }}>
+              <StatCard
+                title={t.messagesThisWeek}
+                value="87"
+                change="+12 vs last week"
+                changeType="positive"
+                icon={MessageSquare}
+                iconColor="bg-accent/10 text-accent"
+              />
+            </motion.div>
+            <motion.div {...fadeInUp} transition={{ delay: 0.25 }}>
+              <StatCard
+                title={t.paymentsDue}
+                value="12"
+                change="3 overdue"
+                changeType="negative"
+                icon={CreditCard}
+                iconColor="bg-warning/10 text-warning"
+              />
+            </motion.div>
+          </>
+        )}
       </div>
 
       {/* ─── Tabs ─── */}
@@ -693,12 +836,20 @@ export default function ParentsPage() {
           <TabsList>
             <TabsTrigger value="children" className="gap-1.5">
               <Baby className="h-4 w-4" />
-              {t.childrenOverview}
+              {isParentView
+                ? (myChildrenNames.length > 1 ? t.myChildrenTab : t.myChildTab)
+                : t.childrenOverview}
             </TabsTrigger>
             <TabsTrigger value="reports" className="gap-1.5">
               <FileText className="h-4 w-4" />
               {t.dailyReports}
             </TabsTrigger>
+            {isParentView && (
+              <TabsTrigger value="health" className="gap-1.5">
+                <Heart className="h-4 w-4" />
+                {t.healthTab}
+              </TabsTrigger>
+            )}
             <TabsTrigger value="payments" className="gap-1.5">
               <DollarSign className="h-4 w-4" />
               {t.payments}
@@ -708,7 +859,7 @@ export default function ParentsPage() {
           {/* ─── Children Overview Tab ─── */}
           <TabsContent value="children">
             <div className="space-y-4">
-              {families.map((family, i) => (
+              {familiesForView.map((family, i) => (
                 <motion.div
                   key={family.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -762,7 +913,7 @@ export default function ParentsPage() {
 
                         {/* Actions */}
                         <div className="flex items-center gap-2">
-                          {getPaymentBadge(family.paymentStatus)}
+                          {!isParentView && getPaymentBadge(family.paymentStatus)}
 
                           <Button
                             variant="ghost"
@@ -775,25 +926,28 @@ export default function ParentsPage() {
                             <MessageSquare className="h-4 w-4" />
                           </Button>
 
-                          <a href={`tel:${family.phone}`}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title={t.callParent}
-                            >
-                              <Phone className="h-4 w-4" />
-                            </Button>
-                          </a>
-
-                          <a href={`mailto:${family.email}`}>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              title={t.emailParent}
-                            >
-                              <Mail className="h-4 w-4" />
-                            </Button>
-                          </a>
+                          {!isParentView && (
+                            <>
+                              <a href={`tel:${family.phone}`}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={t.callParent}
+                                >
+                                  <Phone className="h-4 w-4" />
+                                </Button>
+                              </a>
+                              <a href={`mailto:${family.email}`}>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  title={t.emailParent}
+                                >
+                                  <Mail className="h-4 w-4" />
+                                </Button>
+                              </a>
+                            </>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -815,16 +969,30 @@ export default function ParentsPage() {
                     { weekday: "long", month: "long", day: "numeric" }
                   )}
                 </h3>
-                <Button
-                  className="gap-2"
-                  onClick={() => setReportDialogOpen(true)}
-                >
-                  <Plus className="h-4 w-4" />
-                  {t.addReport}
-                </Button>
+                {isParentView ? (
+                  <Button
+                    className="gap-2"
+                    onClick={() => {
+                      setHomeworkChild(myChildrenNames[0] ?? "");
+                      setHomeworkNotes("");
+                      setHomeworkDialogOpen(true);
+                    }}
+                  >
+                    <FileText className="h-4 w-4" />
+                    {t.uploadDailyHomework}
+                  </Button>
+                ) : (
+                  <Button
+                    className="gap-2"
+                    onClick={() => setReportDialogOpen(true)}
+                  >
+                    <Plus className="h-4 w-4" />
+                    {t.addReport}
+                  </Button>
+                )}
               </div>
 
-              {dailyReports.map((report, i) => (
+              {dailyReportsForView.map((report, i) => (
                 <motion.div
                   key={report.id}
                   initial={{ opacity: 0, y: 10 }}
@@ -912,42 +1080,44 @@ export default function ParentsPage() {
                             <p className="text-sm">{report.note}</p>
                           </div>
 
-                          {/* Expand / View full report */}
-                          <div className="mt-3 flex gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() =>
-                                setExpandedReportId(
-                                  expandedReportId === report.id
-                                    ? null
-                                    : report.id
-                                )
-                              }
-                            >
-                              {expandedReportId === report.id ? (
-                                <>
-                                  <ChevronUp className="h-3 w-3" />
-                                  {isRTL ? "إخفاء التفاصيل" : "Hide Details"}
-                                </>
-                              ) : (
-                                <>
-                                  <ChevronDown className="h-3 w-3" />
-                                  {isRTL ? "عرض التفاصيل" : "Show Details"}
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1"
-                              onClick={() => handleViewReport(report)}
-                            >
-                              <FileText className="h-3 w-3" />
-                              {t.viewReport}
-                            </Button>
-                          </div>
+                          {/* Expand / View full report (staff only) */}
+                          {!isParentView && (
+                            <div className="mt-3 flex gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() =>
+                                  setExpandedReportId(
+                                    expandedReportId === report.id
+                                      ? null
+                                      : report.id
+                                  )
+                                }
+                              >
+                                {expandedReportId === report.id ? (
+                                  <>
+                                    <ChevronUp className="h-3 w-3" />
+                                    {isRTL ? "إخفاء التفاصيل" : "Hide Details"}
+                                  </>
+                                ) : (
+                                  <>
+                                    <ChevronDown className="h-3 w-3" />
+                                    {isRTL ? "عرض التفاصيل" : "Show Details"}
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1"
+                                onClick={() => handleViewReport(report)}
+                              >
+                                <FileText className="h-3 w-3" />
+                                {t.viewReport}
+                              </Button>
+                            </div>
+                          )}
 
                           {/* Expanded section */}
                           {expandedReportId === report.id && (
@@ -1026,7 +1196,7 @@ export default function ParentsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {families.map((family, i) => (
+                    {familiesForView.map((family, i) => (
                       <motion.div
                         key={family.id}
                         initial={{ opacity: 0, x: isRTL ? 20 : -20 }}
@@ -1063,8 +1233,8 @@ export default function ParentsPage() {
                           </div>
                           {getPaymentBadge(family.paymentStatus)}
 
-                          {/* Action buttons based on status */}
-                          {family.paymentStatus === "overdue" && (
+                          {/* Action buttons based on status (staff only) */}
+                          {!isParentView && family.paymentStatus === "overdue" && (
                             <div className="flex gap-1">
                               <Button
                                 variant="outline"
@@ -1085,7 +1255,7 @@ export default function ParentsPage() {
                               </Button>
                             </div>
                           )}
-                          {family.paymentStatus === "pending" && (
+                          {!isParentView && family.paymentStatus === "pending" && (
                             <div className="flex gap-1">
                               <Button
                                 variant="outline"
@@ -1132,7 +1302,7 @@ export default function ParentsPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {paymentHistory.map((tx, i) => (
+                    {paymentHistoryForView.map((tx, i) => (
                       <motion.div
                         key={tx.id}
                         initial={{ opacity: 0, y: 10 }}
@@ -1166,6 +1336,30 @@ export default function ParentsPage() {
               </Card>
             </div>
           </TabsContent>
+
+          {/* ─── Health Tab (parent view only) ─── */}
+          {isParentView && (
+            <TabsContent value="health">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Heart className="h-5 w-5" />
+                    {t.healthTab} – {myChildrenNames.join(", ")}
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    {isRTL
+                      ? "سجلات التطعيمات والحوادث والحساسية لطفلك. للعرض الكامل استخدم قسم الصحة من القائمة لاحقاً عند تفعيله."
+                      : "Vaccinations, incidents, and allergies for your child. Full health records are view-only from the Health section when available."}
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    {isRTL ? "عرض السجلات الصحية للقراءة فقط." : "Health records are view-only."}
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          )}
         </Tabs>
       </motion.div>
 
@@ -1202,7 +1396,7 @@ export default function ParentsPage() {
               <option value="">
                 {isRTL ? "اختر ولي أمر..." : "Select a parent..."}
               </option>
-              {families.map((f) => (
+              {familiesForView.map((f) => (
                 <option key={f.id} value={f.parentName}>
                   {f.parentName}
                 </option>
@@ -1438,6 +1632,56 @@ export default function ParentsPage() {
               }
               value={reportNotes}
               onChange={(e) => setReportNotes(e.target.value)}
+            />
+          </FormField>
+        </div>
+      </FormDialog>
+
+      {/* ─── Upload Daily Homework Dialog (parent only) ─── */}
+      <FormDialog
+        open={homeworkDialogOpen}
+        title={t.uploadDailyHomework}
+        description={
+          isRTL
+            ? "اختر الطفل وأضف ملاحظات أو مرفقات للواجب اليومي"
+            : "Select your child and add notes for the daily homework"
+        }
+        onClose={() => {
+          setHomeworkDialogOpen(false);
+          setHomeworkChild("");
+          setHomeworkNotes("");
+        }}
+        onSubmit={handleSubmitHomework}
+        submitLabel={isRTL ? "رفع الواجب" : "Submit Homework"}
+        cancelLabel={isRTL ? "إلغاء" : "Cancel"}
+      >
+        <div className="space-y-4">
+          <FormField label={isRTL ? "الطفل" : "Child"} required>
+            <select
+              className={selectClass}
+              value={homeworkChild}
+              onChange={(e) => setHomeworkChild(e.target.value)}
+            >
+              <option value="">
+                {isRTL ? "اختر طفلك..." : "Select your child..."}
+              </option>
+              {myChildrenNames.map((name, i) => (
+                <option key={i} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </FormField>
+          <FormField label={t.notes}>
+            <textarea
+              className={textareaClass}
+              placeholder={
+                isRTL
+                  ? "ملاحظات أو وصف الواجب..."
+                  : "Notes or description of the homework..."
+              }
+              value={homeworkNotes}
+              onChange={(e) => setHomeworkNotes(e.target.value)}
             />
           </FormField>
         </div>

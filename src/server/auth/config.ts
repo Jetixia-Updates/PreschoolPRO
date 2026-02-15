@@ -12,23 +12,28 @@ export const authConfig: NextAuthConfig = {
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {
       const isLoggedIn = !!auth?.user;
-      const isOnDashboard = nextUrl.pathname.startsWith("/dashboard");
-      const isOnAuth = nextUrl.pathname.startsWith("/login") || 
-                       nextUrl.pathname.startsWith("/register");
+      const pathname = nextUrl.pathname;
+      // Paths are locale-prefixed: /en/dashboard, /ar/login, etc.
+      const isOnDashboard = pathname.includes("/dashboard");
+      const isOnAuth =
+        pathname.includes("/login") || pathname.includes("/register");
 
       if (isOnDashboard) {
         if (isLoggedIn) return true;
-        return false; // Redirect unauthenticated users to login
-      } else if (isLoggedIn && isOnAuth) {
-        return Response.redirect(new URL("/dashboard", nextUrl));
+        const locale = pathname.split("/")[1] || "en";
+        return Response.redirect(new URL(`/${locale}/login`, nextUrl));
+      }
+      if (isLoggedIn && isOnAuth) {
+        const locale = pathname.split("/")[1] || "en";
+        return Response.redirect(new URL(`/${locale}/dashboard`, nextUrl));
       }
       return true;
     },
     async jwt({ token, user, trigger, session }) {
       if (user) {
-        // Include additional user data in JWT
+        // Include additional user data in JWT (normalize role to string)
         token.id = user.id;
-        token.role = user.role;
+        token.role = String(user.role ?? "PARENT");
         token.schoolId = user.schoolId;
         token.name = user.name;
         token.email = user.email;
@@ -44,7 +49,7 @@ export const authConfig: NextAuthConfig = {
     async session({ session, token }) {
       if (token && session.user) {
         session.user.id = token.id as string;
-        session.user.role = token.role as any;
+        session.user.role = (token.role as string) || "PARENT";
         session.user.schoolId = token.schoolId as string;
         session.user.name = token.name as string;
         session.user.email = token.email as string;

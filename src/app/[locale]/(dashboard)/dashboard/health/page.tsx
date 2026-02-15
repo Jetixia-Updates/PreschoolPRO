@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from "react";
 import { useParams } from "next/navigation";
+import { useParentChildren } from "@/hooks/use-parent-children";
 import { motion } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -159,6 +160,7 @@ export default function HealthPage() {
   const params = useParams();
   const locale = params.locale as string;
   const isRTL = locale === "ar";
+  const { isParentView, isMyChild } = useParentChildren();
 
   const { toasts, success, error: toastError, dismiss } = useToast();
 
@@ -167,6 +169,24 @@ export default function HealthPage() {
   const [vaccinations, setVaccinations] = useState<VaccinationRecord[]>(initialVaccinations);
   const [incidents, setIncidents] = useState<IncidentReport[]>(initialIncidents);
   const [allergies, setAllergies] = useState<AllergyRecord[]>(initialAllergies);
+
+  // ── Parent view: only my children's records ─────────────────────────────────
+  const alertsForView = useMemo(
+    () => (isParentView ? alerts.filter((a) => isMyChild(a.student)) : alerts),
+    [alerts, isParentView, isMyChild]
+  );
+  const vaccinationsForView = useMemo(
+    () => (isParentView ? vaccinations.filter((v) => isMyChild(v.student)) : vaccinations),
+    [vaccinations, isParentView, isMyChild]
+  );
+  const incidentsForView = useMemo(
+    () => (isParentView ? incidents.filter((i) => isMyChild(i.student)) : incidents),
+    [incidents, isParentView, isMyChild]
+  );
+  const allergiesForView = useMemo(
+    () => (isParentView ? allergies.filter((a) => isMyChild(a.student)) : allergies),
+    [allergies, isParentView, isMyChild]
+  );
 
   // ── State: UI ─────────────────────────────────────────────────────────────
   const [search, setSearch] = useState("");
@@ -222,20 +242,20 @@ export default function HealthPage() {
     priority: "low" as HealthAlert["priority"],
   });
 
-  // ── Filtered data ─────────────────────────────────────────────────────────
+  // ── Filtered data (search on view list; view list is parent-filtered when parent) ──
   const q = search.toLowerCase();
-  const filteredAlerts = useMemo(() => alerts.filter((a) => a.student.toLowerCase().includes(q)), [alerts, q]);
-  const filteredVaccinations = useMemo(() => vaccinations.filter((v) => v.student.toLowerCase().includes(q)), [vaccinations, q]);
-  const filteredIncidents = useMemo(() => incidents.filter((i) => i.student.toLowerCase().includes(q)), [incidents, q]);
-  const filteredAllergies = useMemo(() => allergies.filter((a) => a.student.toLowerCase().includes(q)), [allergies, q]);
+  const filteredAlerts = useMemo(() => alertsForView.filter((a) => a.student.toLowerCase().includes(q)), [alertsForView, q]);
+  const filteredVaccinations = useMemo(() => vaccinationsForView.filter((v) => v.student.toLowerCase().includes(q)), [vaccinationsForView, q]);
+  const filteredIncidents = useMemo(() => incidentsForView.filter((i) => i.student.toLowerCase().includes(q)), [incidentsForView, q]);
+  const filteredAllergies = useMemo(() => allergiesForView.filter((a) => a.student.toLowerCase().includes(q)), [allergiesForView, q]);
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-  const activeAlertCount = alerts.filter((a) => a.status === "active").length;
-  const vaccinationUpToDate = vaccinations.length > 0
-    ? Math.round((vaccinations.filter((v) => v.status === "up-to-date").length / vaccinations.length) * 100)
+  // ── Stats (use view list so parent sees only their children's stats) ─────────
+  const activeAlertCount = alertsForView.filter((a) => a.status === "active").length;
+  const vaccinationUpToDate = vaccinationsForView.length > 0
+    ? Math.round((vaccinationsForView.filter((v) => v.status === "up-to-date").length / vaccinationsForView.length) * 100)
     : 0;
-  const incidentsThisMonth = incidents.length;
-  const allergiesTracked = allergies.length;
+  const incidentsThisMonth = incidentsForView.length;
+  const allergiesTracked = allergiesForView.length;
 
   // ── Handlers: Report Incident ─────────────────────────────────────────────
   const handleSubmitIncident = () => {
@@ -453,7 +473,7 @@ export default function HealthPage() {
           <StatCard
             title={isRTL ? "معدل التطعيم" : "Vaccinations Up-to-Date"}
             value={`${vaccinationUpToDate}%`}
-            change={`${vaccinations.filter((v) => v.status === "up-to-date").length} of ${vaccinations.length} current`}
+            change={`${vaccinationsForView.filter((v) => v.status === "up-to-date").length} of ${vaccinationsForView.length} current`}
             changeType="neutral"
             icon={Syringe}
             iconColor="bg-primary/10 text-primary"
@@ -473,7 +493,7 @@ export default function HealthPage() {
           <StatCard
             title={isRTL ? "حالات حساسية" : "Allergies Tracked"}
             value={String(allergiesTracked)}
-            change={`${allergies.filter((a) => a.severity === "high").length} high severity`}
+            change={`${allergiesForView.filter((a) => a.severity === "high").length} high severity`}
             changeType="negative"
             icon={AlertTriangle}
             iconColor="bg-secondary/10 text-secondary"
