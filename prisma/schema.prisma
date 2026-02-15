@@ -2,12 +2,13 @@
 // Multi-tenant architecture with schoolId field
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  output          = "../node_modules/.prisma/client"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ==================== ENUMS ====================
@@ -401,6 +402,7 @@ model DevelopmentRecord {
 
 model Assessment {
   id                  String            @id @default(cuid())
+  studentId           String
   developmentRecordId String
   milestoneId         String
   status              MilestoneStatus
@@ -408,6 +410,7 @@ model Assessment {
   notes               String?           @db.Text
   score               Float?
   
+  student           Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
   developmentRecord DevelopmentRecord @relation(fields: [developmentRecordId], references: [id], onDelete: Cascade)
   milestone         Milestone         @relation(fields: [milestoneId], references: [id])
 }
